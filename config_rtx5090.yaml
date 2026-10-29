@@ -1,0 +1,55 @@
+# ==============================================================================
+# RoboMamba + DINOv2 + ACT Policy Configuration (Optimized for RTX 5090 32GB)
+# Competition: Singapore Embodied AI Challenge for Manufacturing (ECM 2027)
+# Dataset: rocochallenge2025/ecm2027_sim_data
+# ==============================================================================
+
+dataset:
+  repo_id: "rocochallenge2025/ecm2027_sim_data"
+  revision: "main"
+  cameras:
+    - "observation.images.first_person_camera_rgb" # Head stereo cleanroom view
+    - "observation.images.left_hand_camera_rgb"    # Left wrist eye-in-hand
+    - "observation.images.right_hand_camera_rgb"   # Right wrist eye-in-hand
+  state_key: "observation.state"
+  action_key: "action"
+  raw_image_size: [480, 640, 3]                  # Native LeRobot recording resolution
+  model_input_size: [224, 224]                   # DINOv2 native patch input resolution
+
+model:
+  # --- Vision Backbone (DINOv2) ---
+  dino_backbone: "dinov2_vitb14"                 # ViT-Base (86M params, 768-dim tokens)
+  freeze_dino: true                              # Freeze DINOv2 for fast training & memory efficiency
+
+  # --- Sequence & Policy Dimensions ---
+  d_model: 768                                   # Match DINOv2 ViT-Base 768-dim output directly
+  n_mamba_layers: 6                              # 6 Mamba SSM layers for long temporal chamber context
+  chunk_size: 32                                 # Action prediction horizon (32 timesteps ~ 1.07s at 30Hz)
+  latent_dim: 32                                 # CVAE style latent dimension
+  kl_weight: 10.0                                # Beta-VAE KL divergence regularization weight
+
+  # --- GalBot-Mobile Dimensions (Competition Specific) ---
+  state_dim: 77                                  # Full proprioception (base + dual arms + grippers)
+  action_dim: 20                                 # Bimanual differential IK / joint deltas + grippers
+
+training:
+  # --- RTX 5090 Throughput Optimization ---
+  batch_size: 64                                 # Fits comfortably within ~18-22GB of 32GB VRAM
+  num_epochs: 600                                # 600 epochs * ~196 steps/epoch ≈ 117,600 gradient steps
+  learning_rate: 2.0e-4                          # Tuned learning rate for batch_size=64 with AdamW
+  weight_decay: 1.0e-4                           # Prevents overfitting on 100 demonstration episodes
+  warmup_epochs: 15                              # Linear warmup to prevent early CVAE divergence
+  lr_schedule: "cosine"                          # Cosine decay to 1e-6
+
+  # --- System & Precision ---
+  device: "cuda"
+  precision: "bfloat16"                          # RTX 5090 Blackwell native BF16 tensor core acceleration
+  num_workers: 8                                 # Parallel PyTorch dataloader worker threads
+  pin_memory: true
+  save_dir: "checkpoints/ecm2027_rtx5090"
+  save_every_epochs: 50                          # Periodic checkpoint frequency
+
+hub:
+  push_to_hub: false                             # Set true to sync checkpoints to your HF account
+  repo_id: "Gogul99/RoboMamba_DINO_ACT_ECM2027"
+  private: true

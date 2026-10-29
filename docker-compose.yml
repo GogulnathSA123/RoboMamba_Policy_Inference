@@ -1,0 +1,21 @@
+version: '3.8'
+
+services:
+  robomamba-inference:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: robomamba-inference:latest
+    container_name: robomamba_inference
+    # Auto-detects NVIDIA GPUs if available; otherwise falls back gracefully to CPU
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    volumes:
+      # Mount local checkpoints directly so you don't need to rebuild Docker after training
+      - ./checkpoints:/workspace/RoboMamba_Policy_Inference/checkpoints
+    command: test
